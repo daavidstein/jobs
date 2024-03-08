@@ -5,14 +5,20 @@ import json
 from urllib.parse import urljoin
 from duckduckgo_search import DDGS
 from tqdm import tqdm
+from logging import getLogger
+import boto3
+from time import time_ns
+logger = getLogger(__name__)
+
 def get_jobs_from_company(company_url: str, search_term: str = "data scientist",
                           base_url="https://boards.greenhouse.io") -> List[str]:
+
     """From a listing of jobs at a company, return the list of urls for job postings that are relevant to the search term"""
 
     company = requests.get(company_url)
     html_resp = company.content.decode("utf-8")
     tree = html.fromstring(html_resp)
-    anchors = tree.xpath(f'/html/body//a')
+    anchors = tree.xpath('/html/body//a')
     new_links = list()
     for a in anchors:
         if not a.text:
@@ -37,13 +43,14 @@ def get_job_data(job_url: str) -> Optional[Dict[str,Any]]:
     if len(context) == 1:
         schema = json.loads(context[0].strip("\n").strip())
     else:
+        schema = None
         #this is greenhouse specific
         job_closed = 'The job you are looking for is no longer open.' in tree.xpath(
             f'/html//div[@class="flash-pending"]/text()')
         if job_closed:
-            schema = None
+            logger.info(f"Job closed for url {job_url}")
         else:
-            raise RuntimeError("Length of context not equal to 1. Did not detect closed job")
+            logger.info(f"Length of context not equal to 1. Did not detect closed job. url: {job_url}")
 
     return schema
 
@@ -63,3 +70,25 @@ def search_jobs(search_term: str="data scientist", site:str="boards.greenhouse.i
         links.extend(company_jobs)
 
     return links
+
+
+def write_data_to_s3(data: dict, search_term: str, bucket_name: str = "scrapedjobs", client=None):
+    client = client or boto3.client("s3")
+
+    timestamp = int(time_ns())
+    key = f"{timestamp}/{search_term.replace(' ', '_')}.json"
+
+    client.put_object(
+        Body=json.dumps(data),
+        Bucket=bucket_name,
+        Key=key
+    )
+    return f"s3://{bucket_name}/{key}"
+
+if __name__ == "__main__":
+    search_term = "data scientist"
+    links = search_jobs(search_term=search_term)
+    data = [get_job_data(job_url) for job_url in tqdm(links)]
+    data_json = {url: d for url, d in zip(links, data) if data}
+    s3_url = write_data_to_s3(data=data_json,search_term=search_term)
+    logger.info(f"{len(data_json)} jobs data written to {s3_url}")

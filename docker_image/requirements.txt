@@ -1,3 +1,5 @@
 duckduckgo_search
 lxml
 tqdm
+requests
+boto3

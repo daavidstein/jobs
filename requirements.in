@@ -2,3 +2,4 @@ lxml
 duckduckgo-search
 tqdm
 user-agent
+pytest

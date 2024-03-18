@@ -1,4 +1,5 @@
-from scrape import dedupe_keys, clean_url, job_url_to_s3key
+from split_docker_image.split_jobs import dedupe_keys, job_url_to_s3key, clean_url
+
 
 def test_dedupe_keys():
 

@@ -1,5 +1,5 @@
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 import boto3
 from tqdm import tqdm
 from logging import getLogger
@@ -56,7 +56,7 @@ def get_json_s3(key: str, bucket="scrapedjobs", client=None):
     return json.loads(obj["Body"].read())
 
 
-def split_s3url(s3url: str) -> str:
+def split_s3url(s3url: str) -> Tuple[str,str]:
     """from an s3url, extract the bucket and key"""
     noprotocol = s3url.removeprefix("s3://")
     bucket = noprotocol.split("/")[0]

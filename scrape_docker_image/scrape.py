@@ -53,7 +53,7 @@ def get_job_data(job_url: str) -> Optional[Dict[str,Any]]:
             if flash_pending:
                 #this will happen if the job has been closed or the url was invalid
                 message = flash_pending[0]
-                logger.info(message)
+                logger.info(f"{job_url}: {message}")
 
 
     return schema

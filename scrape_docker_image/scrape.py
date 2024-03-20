@@ -9,6 +9,7 @@ from logging import getLogger
 import boto3
 from time import time_ns
 logger = getLogger(__name__)
+logger.setLevel("INFO")
 
 def get_jobs_from_company(company_url: str, search_term: str = "data scientist",
                           base_url="https://boards.greenhouse.io") -> List[str]:
@@ -36,21 +37,24 @@ def get_job_data(job_url: str) -> Optional[Dict[str,Any]]:
     """get job description metadata from a JD url
     right now this only supports greenhouse (boards.greenhouse.io) JDs
     """
+    schema = None
     resp = requests.get(job_url)
     tree = html.fromstring(resp.content.decode("utf-8"))
-    #the json schema for the greenhouse JDs comes after this javascript tag
-    context = tree.xpath(f'/html/body/script[@type="application/ld+json"]/text()')
-    if len(context) == 1:
-        schema = json.loads(context[0].strip("\n").strip())
+    if tree.text == "The board you are looking for is no longer open.":
+        logger.info(f"Job board closed for url {job_url}")
     else:
-        schema = None
-        #this is greenhouse specific
-        job_closed = 'The job you are looking for is no longer open.' in tree.xpath(
-            f'/html//div[@class="flash-pending"]/text()')
-        if job_closed:
-            logger.info(f"Job closed for url {job_url}")
+        # the json schema for the greenhouse JDs comes after this javascript tag
+        context = tree.xpath(f'/html/body/script[@type="application/ld+json"]/text()')
+        if len(context) == 1:
+            schema = json.loads(context[0].strip("\n").strip())
         else:
-            logger.info(f"Length of context not equal to 1. Did not detect closed job. url: {job_url}")
+            #this is greenhouse specific
+            flash_pending = tree.xpath(f'/html//div[@class="flash-pending"]/text()')
+            if flash_pending:
+                #this will happen if the job has been closed or the url was invalid
+                message = flash_pending[0]
+                logger.info(message)
+
 
     return schema
 

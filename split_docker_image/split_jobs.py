@@ -4,6 +4,7 @@ import boto3
 from tqdm import tqdm
 from logging import getLogger
 logger = getLogger(__name__)
+logger.setLevel("INFO")
 
 def ls_s3(bucket="scrapedjobs", **kwargs):
     """

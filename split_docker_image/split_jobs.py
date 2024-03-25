@@ -77,7 +77,9 @@ def lambda_handler(event: str, context):
 
     client = boto3.client("s3")
 
-    jobs_data_s3url = event["jobs_data"]
+    #jobs_data_s3url = event["jobs_data"]
+    jobs_data_s3url = event["s3url"]
+
     bucket_name, key = split_s3url(jobs_data_s3url)
     prefix = event.get("prefix", "deduped/")
    # bucket_name = event.get("bucket_name","scrapedjobs")

@@ -32,6 +32,40 @@ def get_jobs_from_company(company_url: str, search_term: str = "data scientist",
             new_links.append(new_link)
     return new_links
 
+def parse_context(context, tree, job_url, logger):
+    if "boards.greenhouse.io" in job_url:
+        if len(context) == 1:
+            schema = json.loads(context[0].strip("\n").strip())
+        else:
+            #this is greenhouse specific
+            flash_pending = tree.xpath(f'/html//div[@class="flash-pending"]/text()')
+            if flash_pending:
+                #this will happen if the job has been closed or the url was invalid
+                message = flash_pending[0]
+                logger.info(f"{job_url}: {message}")
+
+    # if "comeet.com" in job_url:
+    #     #TODO comeet will redirect to the company page if the job is stale. we need to account for this.
+    #     # the way we can tell is that for a job description, there will be a POSITION_DATA JS field that will be non-null
+    #     # for a company page meanwhile, there will be a non-null COMPANY_POSITIONS_DATA field
+    #     #check if this is a job listing or a company page
+    #     script = tree.xpath('/html//script[@type="text/javascript"]/text()')
+    #     is_job_posting = any(["COMPANY_POSITIONS_DATA = null;" in s for s in script])
+    #     is_company_page = any(["POSITION_DATA = null;" in s for s in script])
+    #
+    #     if is_job_posting:
+    #
+    #         context2 = context[0].replace("\n", "").replace("    ", "")[:-1]
+    #         schema = json.loads(context2)
+    #
+    #     elif is_company_page:
+
+
+    return schema
+
+
+
+
 
 def get_job_data(job_url: str) -> Optional[Dict[str,Any]]:
     """get job description metadata from a JD url
@@ -64,11 +98,21 @@ def search_jobs(search_term: str="data scientist", site:str="boards.greenhouse.i
     with DDGS() as ddgs:
         links = [r["href"] for r in ddgs.text(f"{search_term} site:{site}", max_results=max_results)]
     for link in tqdm(links):
-        if "jobs" not in link.split("/"):
+        if site =="boards.greenhouse.io" and "jobs" not in link.split("/"):
             company_sites.append(link)
             links.remove(link)
 
+        if site =="comeet.com/jobs":
+            #FIXME this is sort of wasteful if it is a real job because we are making the request twice
+            resp = requests.get(link)
+            if resp.url != link: #redirected
+                company_sites.append(link)
+                links.remove(link)
+
+
     for company in tqdm(company_sites):
+        if site =="comeet.com/jobs":
+            raise NotImplementedError("need to write logic for fetching urls from comeet company sites")
         #TODO async
         company_jobs = get_jobs_from_company(company)
         links.extend(company_jobs)

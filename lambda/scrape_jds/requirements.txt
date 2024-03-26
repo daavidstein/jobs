@@ -1,6 +1,5 @@
 lxml
 tqdm
-requests
 boto3
 tenacity
 user_agent

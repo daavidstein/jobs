@@ -9,6 +9,12 @@ import asyncio
 import tenacity as tn
 from asyncio.exceptions import TimeoutError
 import json
+from logging import getLogger
+
+
+logger = getLogger(__name__)
+logger.setLevel("INFO")
+
 
 @tn.retry(retry=tn.retry_if_exception_type(TimeoutError), stop=tn.stop_after_attempt(10),
           wait=tn.wait_exponential(multiplier=1, min=4, max=10))

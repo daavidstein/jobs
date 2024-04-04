@@ -141,8 +141,10 @@ def lambda_handler(event,context):
     all_job_urls = list()
 
     prefix = event.get("s3_prefix","deduped")
+    company = event.get("company")
     company_urls = get_company_urls(s3_prefix=prefix)
-
+    if company:
+        company_urls = [url for url in company_urls if company in url]
     responses = asyncio.run(async_fetch_jobs(company_urls))
 
     for resp in tqdm(responses,"company response"):
@@ -153,7 +155,21 @@ def lambda_handler(event,context):
             all_job_urls.extend(company_job_urls)
 
     companies_jobs = make_companies_dict(all_job_urls)
-    return {'statusCode': 200, "jobs": json.dumps(companies_jobs), 'num_jobs': len(all_job_urls)}
+
+    client = boto3.client('lambda')
+    arn = "arn:aws:lambda:us-east-1:652060930823:function:scrape-jds"
+    request_ids = list()
+    for company, job_list in tqdm(companies_jobs.items(),"company"):
+
+        response = client.invoke(
+            FunctionName=arn,
+            InvocationType='Event',
+            Payload=json.dumps({"jobs": json.dumps({company: job_list})})
+        )
+        request_id = response["ResponseMetadata"]["RequestId"]
+        request_ids.append(request_id)
+
+    return {'statusCode': 200, "jobs": json.dumps(companies_jobs), 'num_jobs': len(all_job_urls),"num_companies": len(companies_jobs),"lambda_request_ids": request_ids }
 
 
 

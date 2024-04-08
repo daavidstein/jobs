@@ -144,14 +144,14 @@ def lambda_handler(event, context):
 
     #invoke next aws_lambda and pass data_json as the event to the next aws_lambda
 
-    # client = boto3.client("aws_lambda")
-    # arn = "arn:aws:aws_lambda:us-east-1:652060930823:function:split-jobs"
-    # client.invoke(
-    #     FunctionName=arn,
-    #     #invoke asynchronously so we don't wait for completion
-    #     InvocationType='Event',
-    #     Payload=json.dumps({"jobs_data": s3_url})
-    # )
-    #logger.info("split jobs aws_lambda invoked succesfully")
+    client = boto3.client("lambda")
+    arn = "arn:aws:lambda:us-east-1:652060930823:function:split-jobs"
+    client.invoke(
+        FunctionName=arn,
+        #invoke asynchronously so we don't wait for completion
+        InvocationType='Event',
+        Payload=json.dumps({"jobs_data": s3_url})
+    )
+    logger.info("split jobs aws_lambda invoked succesfully")
 
     return {'statusCode': 200, 's3url': s3_url, 'num_jobs': len(data_json)}

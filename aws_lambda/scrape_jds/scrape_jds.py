@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from lxml import html
 import boto3
 from user_agent import generate_user_agent
@@ -91,20 +91,20 @@ async def fetch(client, url):
 #
 #     return job_urls
 #
-# def ls_s3(bucket="scrapedjobs", **kwargs):
-#     """
-#
-#     Args:
-#         bucket:
-#         Prefix: the prefix to filter the s3 bucket on
-#
-#     Returns:
-#
-#     """
-#     s3 = boto3.resource('s3')
-#     bucket = s3.Bucket(bucket)
-#     keys = [o.key for o in tqdm(bucket.objects.filter(**kwargs))]
-#     return keys
+def ls_s3(bucket: str="scrapedjobs", **kwargs) -> List[str]:
+    """
+
+    Args:
+        bucket:
+        Prefix: the prefix to filter the s3 bucket on
+
+    Returns:
+
+    """
+    s3 = boto3.resource('s3')
+    bucket = s3.Bucket(bucket)
+    keys = [o.key for o in tqdm(bucket.objects.filter(**kwargs))]
+    return keys
 #
 #
 # def get_company_urls(s3_prefix: str = "deduped") -> List[str]:
@@ -133,6 +133,11 @@ async def async_fetch_jobs(urls):
     return r
 
 
+def is_valid_job(job):
+    valid = True
+    if not job.get("@type","") == "JobPosting":
+        valid = False
+    return valid
 
 def get_job_data(jd:str, job_url) -> Optional[Dict[str,Any]]:
     """get job description metadata from a JD url
@@ -147,6 +152,8 @@ def get_job_data(jd:str, job_url) -> Optional[Dict[str,Any]]:
         context = tree.xpath(f'/html/body/script[@type="application/ld+json"]/text()')
         if len(context) == 1:
             schema = json.loads(context[0].strip("\n").strip())
+            if not is_valid_job(schema):
+                schema = None
         else:
             #this is greenhouse specific
             flash_pending = tree.xpath(f'/html//div[@class="flash-pending"]/text()')
@@ -160,18 +167,57 @@ def get_job_data(jd:str, job_url) -> Optional[Dict[str,Any]]:
 
 
 
-def write_data_to_s3(data: dict, bucket_name: str = "scrapedjobs", client=None):
-    client = client or boto3.client("s3")
+# def write_data_to_s3(data: dict, bucket_name: str = "scrapedjobs", client=None):
+#     client = client or boto3.client("s3")
+#
+#     timestamp = int(time_ns())
+#     key = f"{timestamp}/all_titles.json"
+#
+#     client.put_object(
+#         Body=json.dumps(data),
+#         Bucket=bucket_name,
+#         Key=key
+#     )
+#     return f"s3://{bucket_name}/{key}"
 
-    timestamp = int(time_ns())
-    key = f"{timestamp}/all_titles.json"
+def job_url_to_s3key(job_url: str, new_prefix=None) -> str:
+    def clean_url(url: str) -> str:
+        """Remove query bit from some greenhouse urls like boards.greenhouse.io/6sense/jobs/5567149?gh_jid=5567149"""
 
+        url = url.split("?")[0]
+        return url
+
+    job_url = clean_url(job_url)
+    key = job_url.removeprefix("https://").removeprefix("http://")
+    if new_prefix:
+        key = f"{new_prefix}/{key}"
+    return key
+
+def write_one_jd_s3(job_url: str, jd: dict, client: None, bucket_name="scrapedjobs"):
+    client or boto3.client("s3")
+
+    key = f"deduped/{job_url_to_s3key(job_url)}.json"
     client.put_object(
-        Body=json.dumps(data),
+        Body=json.dumps(jd),
         Bucket=bucket_name,
         Key=key
     )
-    return f"s3://{bucket_name}/{key}"
+    return key
+
+def filter_and_alert(url_jd: Dict[str,Optional[Dict[str,Any]]]):
+    def url_to_company(url):
+        return url.removeprefix("https://").split("/")[1]
+
+    companies = [url_to_company(url) for url in url_jd.keys()]
+    if len(set(companies)) != 1:
+        raise RuntimeError(f"Expected exactly one company, got: {set(companies)}")
+
+    company = companies[0]
+
+    s3_prefix = f"deduped/boards.greenhouse.io/{company}/"
+    existing_jobs = [job_s3_url for job_s3_url in ls_s3(Prefix=s3_prefix) if job_s3_url.endswith(".json")]
+    #TODO trigger lambda, passing existing_jobs and url_jd
+
 
 
 def lambda_handler(event,context):
@@ -185,14 +231,15 @@ def lambda_handler(event,context):
 
     """
     job_urls = list()
-    companies_jobs = event["jobs"]
+    companies = json.loads(event["jobs"])
     base_url = event.get("base_url", "https://boards.greenhouse.io")
 
     #reconstruct urls from {"company_name": [job_id, job_id]} dict
-    for company, job_ids in companies_jobs.items():
-        for job_id in job_ids:
-            job_url = f"{base_url}/{company}/jobs/{job_id}"
-            job_urls.append(job_url)
+    for companies_jobs in companies:
+        for company, job_ids in companies_jobs.items():
+            for job_id in job_ids:
+                job_url = f"{base_url}/{company}/jobs/{job_id}"
+                job_urls.append(job_url)
 
     #scrape
     responses = asyncio.run(async_fetch_jobs(job_urls))
@@ -203,13 +250,20 @@ def lambda_handler(event,context):
         if content:
             decoded = content.decode("utf-8")
             job_description = get_job_data(decoded, url)
-            url_jd[url] = job_description
+            if job_description:
+                url_jd[url] = job_description
 
+#TODO filter and alert lambda goes here
+    # filter_and_alert(url_jd)
+    s3_keys = list()
+    client = boto3.client('s3')
+    for url, jd in url_jd.items():
+        s3_url = write_one_jd_s3(job_url=url,jd=jd,client=client)
+        s3_keys.append(s3_url)
 
-    s3_url = write_data_to_s3(data=url_jd)
-    logger.info(f"{len(url_jd)} jobs data written to {s3_url}")
-    #TODO need to trigger split jobs
-    return {'statusCode': 200, "s3_url": s3_url, 'num_jobs': len(url_jd)}
+    logger.info(f"{len(s3_keys)} jobs data written to s3: {s3_keys}")
+
+    return {'statusCode': 200, "s3_keys": s3_keys, 'num_jobs': len(url_jd)}
 
 
 
@@ -225,3 +279,11 @@ def lambda_handler(event,context):
 #then v1 can be a json or something on s3
 #then v2 can be using step functions choice state.
 
+
+
+#I think we need to have a lambda that just takes as input a set of greenhouse urls and
+#then checks it against what is already on deduped to see if it's a new job.
+
+#these new urls are passed to a scrape-jds lambda
+#the jsons of the newly scraped jds are sent to a 3rd lambda
+#that does filtering and alerting.

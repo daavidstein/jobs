@@ -3,10 +3,10 @@ StartAt: DDG Search
 States:
   DDG Search:
     Type: Task
-    Resource: arn:aws:states:::lambda:invoke
+    Resource: arn:aws:states:::aws_lambda:invoke
     Parameters:
       Payload.$: $
-      FunctionName: arn:aws:lambda:us-east-1:652060930823:function:ddg-search:$LATEST
+      FunctionName: arn:aws:aws_lambda:us-east-1:652060930823:function:ddg-search:$LATEST
     Retry:
       - ErrorEquals:
           - Lambda.ServiceException
@@ -21,11 +21,11 @@ States:
     Next: Put Companies S3
   Put Companies S3:
     Type: Task
-    Resource: arn:aws:states:::lambda:invoke
+    Resource: arn:aws:states:::aws_lambda:invoke
     OutputPath: $.Payload
     Parameters:
       Payload.$: $
-      FunctionName: arn:aws:lambda:us-east-1:652060930823:function:put-objects-s3:$LATEST
+      FunctionName: arn:aws:aws_lambda:us-east-1:652060930823:function:put-objects-s3:$LATEST
     Retry:
       - ErrorEquals:
           - Lambda.ServiceException

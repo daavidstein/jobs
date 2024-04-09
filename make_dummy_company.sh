@@ -1,0 +1,1 @@
+aws s3 cp dummy s3://scrapedjobs/deduped/boards.greenhouse.io/$1/dummy

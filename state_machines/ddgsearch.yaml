@@ -1,0 +1,38 @@
+Comment: A description of my state machine
+StartAt: DDG Search
+States:
+  DDG Search:
+    Type: Task
+    Resource: arn:aws:states:::aws_lambda:invoke
+    Parameters:
+      Payload.$: $
+      FunctionName: arn:aws:aws_lambda:us-east-1:652060930823:function:ddg-search:$LATEST
+    Retry:
+      - ErrorEquals:
+          - Lambda.ServiceException
+          - Lambda.AWSLambdaException
+          - Lambda.SdkClientException
+          - Lambda.TooManyRequestsException
+        IntervalSeconds: 1
+        MaxAttempts: 3
+        BackoffRate: 2
+    ResultSelector:
+      s3_keys.$: $.Payload.s3_keys
+    Next: Put Companies S3
+  Put Companies S3:
+    Type: Task
+    Resource: arn:aws:states:::aws_lambda:invoke
+    OutputPath: $.Payload
+    Parameters:
+      Payload.$: $
+      FunctionName: arn:aws:aws_lambda:us-east-1:652060930823:function:put-objects-s3:$LATEST
+    Retry:
+      - ErrorEquals:
+          - Lambda.ServiceException
+          - Lambda.AWSLambdaException
+          - Lambda.SdkClientException
+          - Lambda.TooManyRequestsException
+        IntervalSeconds: 1
+        MaxAttempts: 3
+        BackoffRate: 2
+    End: true

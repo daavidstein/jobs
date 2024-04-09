@@ -78,6 +78,8 @@ def lambda_handler(event: str, context):
     client = boto3.client("s3")
 
     jobs_data_s3url = event["jobs_data"]
+    #jobs_data_s3url = event["s3url"]
+
     bucket_name, key = split_s3url(jobs_data_s3url)
     prefix = event.get("prefix", "deduped/")
    # bucket_name = event.get("bucket_name","scrapedjobs")
@@ -87,8 +89,10 @@ def lambda_handler(event: str, context):
     #existing_jobs start with prefix
     existing_keys = ls_s3(bucket=bucket_name, Prefix=prefix)
     new_jobs = dedupe_keys(existing_keys, jobs_data, prefix)
+    #TODO here is where you can spin of a new lambda to do the alerting about new jobs
+    # that match selected criteria
 
-
+    keys = list()
     for job_url, data in tqdm(new_jobs.items()):
         if data:
             key = f"deduped/{job_url_to_s3key(job_url)}.json"
@@ -97,6 +101,7 @@ def lambda_handler(event: str, context):
                 Bucket=bucket_name,
                 Key=key
             )
+            keys.append(key)
     s3url =  f"s3://{bucket_name}/{key}"
-    logger.info(f"{ len(new_jobs) } new jobs written to {s3url}")
+    logger.info(f"{ len(new_jobs) } new jobs written to {keys}")
     return {'statusCode': 200, 's3url':s3url, 'num_jobs': len(new_jobs)}

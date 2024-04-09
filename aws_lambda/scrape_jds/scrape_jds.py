@@ -266,24 +266,3 @@ def lambda_handler(event,context):
     return {'statusCode': 200, "s3_keys": s3_keys, 'num_jobs': len(url_jd)}
 
 
-
-#I want to split jobs, but at the same time trigger sns alert for new jobs.
-#so when I check to see if a job is new in split_jobs, I can also trigger an SNS alert for that.
-#I think for now we should just use boto3 to do the sns alerts,
-#however later we can probably do this directly in step functions.
-#ah, so here is probably why you want to split off the alerting - you want filter conditions.
-#do we alert for data scientist jobs, or ml engineer jobs, or what?
-#the thing is that you want to be able to easily change your filter conditions without going in and updating a lambda.
-#so there's definitely a way to do this with "choice" states in step functions.
-#I think for the v0 I should just embed the logic within the lambda
-#then v1 can be a json or something on s3
-#then v2 can be using step functions choice state.
-
-
-
-#I think we need to have a lambda that just takes as input a set of greenhouse urls and
-#then checks it against what is already on deduped to see if it's a new job.
-
-#these new urls are passed to a scrape-jds lambda
-#the jsons of the newly scraped jds are sent to a 3rd lambda
-#that does filtering and alerting.

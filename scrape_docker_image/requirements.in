@@ -1,0 +1,8 @@
+lxml
+tqdm
+requests
+boto3
+tenacity
+user_agent
+aiohttp
+duckduckgo_search>=5.2.2

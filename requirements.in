@@ -1,5 +1,7 @@
 lxml
-duckduckgo-search
+duckduckgo-search>=5.2.2
 tqdm
 user-agent
 pytest
+openai
+boto3

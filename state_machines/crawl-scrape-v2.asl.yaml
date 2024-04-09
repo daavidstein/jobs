@@ -1,0 +1,76 @@
+StartAt: ListObjectsV2WithPagination
+States:
+  ListObjectsV2WithPagination:
+    Type: Task
+    Next: Map
+    Parameters:
+      Bucket: scrapedjobs
+      Prefix: deduped/
+      ContinuationToken.$: $.NextContinuationToken
+    Resource: arn:aws:states:::aws-sdk:s3:listObjectsV2
+    ResultSelector:
+      Keys.$: $..[?(@.Key && @.Key =~ /.*\/dummy$/)].Key
+      NextContinuationToken.$: $.NextContinuationToken
+  Map:
+    Type: Map
+    ItemProcessor:
+      ProcessorConfig:
+        Mode: DISTRIBUTED
+        ExecutionType: STANDARD
+      StartAt: CrawlCompanies
+      States:
+        CrawlCompanies:
+          Type: Task
+          Resource: arn:aws:states:::lambda:invoke
+          OutputPath: $.Payload
+          Parameters:
+            FunctionName: >-
+              arn:aws:lambda:us-east-1:652060930823:function:crawl-companies:$LATEST
+            Payload.$: $
+          Retry:
+            - ErrorEquals:
+                - Lambda.ServiceException
+                - Lambda.AWSLambdaException
+                - Lambda.SdkClientException
+                - Lambda.TooManyRequestsException
+              IntervalSeconds: 10
+              MaxAttempts: 3
+              BackoffRate: 2
+              JitterStrategy: FULL
+          Next: scrape-jds
+        scrape-jds:
+          Type: Task
+          Resource: arn:aws:states:::lambda:invoke
+          OutputPath: $.Payload
+          Parameters:
+            Payload.$: $
+            FunctionName: arn:aws:lambda:us-east-1:652060930823:function:scrape-jds:$LATEST
+          Retry:
+            - ErrorEquals:
+                - Lambda.ServiceException
+                - Lambda.AWSLambdaException
+                - Lambda.SdkClientException
+                - Lambda.TooManyRequestsException
+              IntervalSeconds: 10
+              MaxAttempts: 3
+              BackoffRate: 2
+              JitterStrategy: FULL
+          End: true
+    Label: Map
+    MaxConcurrency: 10000
+    ItemSelector:
+      company_prefix.$: $$.Map.Item.Value
+    InputPath: $.Keys
+    Next: Choice
+    ResultPath: $.jobs
+    ToleratedFailurePercentage: 15
+  Choice:
+    Type: Choice
+    Choices:
+      - Variable: $.NextContinuationToken
+        IsPresent: true
+        Next: ListObjectsV2WithPagination
+    Default: Pass
+  Pass:
+    Type: Pass
+    End: true

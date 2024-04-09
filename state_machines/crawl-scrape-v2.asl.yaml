@@ -6,11 +6,14 @@ States:
     Parameters:
       Bucket: scrapedjobs
       Prefix: deduped/
-      ContinuationToken.$: $.NextContinuationToken
+      ContinuationToken.$: $.NextContinuationToken[0]
     Resource: arn:aws:states:::aws-sdk:s3:listObjectsV2
     ResultSelector:
       Keys.$: $..[?(@.Key && @.Key =~ /.*\/dummy$/)].Key
-      NextContinuationToken.$: $.NextContinuationToken
+      NextContinuationToken.$: $.[?(@ =~ /.*NextContinuationToken.*/)].NextContinuationToken
+      TokenExists.$: >-
+        States.ArrayLength($.[?(@ =~
+        /.*NextContinuationToken.*/)].NextContinuationToken)
   Map:
     Type: Map
     ItemProcessor:
@@ -67,8 +70,11 @@ States:
   Choice:
     Type: Choice
     Choices:
-      - Variable: $.NextContinuationToken
-        IsPresent: true
+      - And:
+          - Variable: $.TokenExists
+            IsPresent: true
+          - Variable: $.TokenExists
+            NumericEquals: 1
         Next: ListObjectsV2WithPagination
     Default: Pass
   Pass:

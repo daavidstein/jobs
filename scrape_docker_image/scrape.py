@@ -142,7 +142,7 @@ def lambda_handler(event, context):
     s3_url = write_data_to_s3(data=data_json,search_term=search_term)
     logger.info(f"{len(data_json)} jobs data written to {s3_url}")
 
-    #invoke next aws_lambda and pass data_json as the event to the next aws_lambda
+    #invoke next lambda and pass data_json as the event to the next lambda
 
     client = boto3.client("lambda")
     arn = "arn:aws:lambda:us-east-1:652060930823:function:split-jobs"
@@ -152,6 +152,6 @@ def lambda_handler(event, context):
         InvocationType='Event',
         Payload=json.dumps({"jobs_data": s3_url})
     )
-    logger.info("split jobs aws_lambda invoked succesfully")
+    logger.info("split jobs lambda invoked succesfully")
 
     return {'statusCode': 200, 's3url': s3_url, 'num_jobs': len(data_json)}

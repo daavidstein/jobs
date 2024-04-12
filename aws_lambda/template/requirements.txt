@@ -1,6 +1,0 @@
-lxml
-tqdm
-boto3
-tenacity
-user_agent
-aiohttp

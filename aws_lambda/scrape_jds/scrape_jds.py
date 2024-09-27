@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Any, List
+from typing import Dict, Optional, Any, List, Tuple
 from lxml import html
 import boto3
 from user_agent import generate_user_agent
@@ -21,11 +21,7 @@ async def fetch(client, url):
     """FIXME factor out to utils.py"""
     try:
         headers = {'User-Agent': generate_user_agent(),
-                #   'accept': '*/*',
-                   #'accept-encoding': 'gzip, deflate, br',
-                 #  'accept-language': 'en-US,en;q=0.9',
                    'referer': 'https://www.google.com'
-
                    }
         async with client.get(url, headers=headers) as resp:
             if resp.status == 200:
@@ -139,12 +135,28 @@ def is_valid_job(job):
         valid = False
     return valid
 
-def get_job_data(jd:str, job_url) -> Optional[Dict[str,Any]]:
+
+def get_location_indicators(tree) -> Tuple[str, str]:
+    # greenhouse
+    div_location = None
+    meta_location = None
+    div = tree.xpath(f'/html/body//div[@class="location"]/text()')
+    if div:
+        div_location = div[0].strip().lower()
+
+    meta = tree.xpath(f'/html//meta[@property="og:description"]')
+    if meta:
+        meta_vals = meta[0].values()
+        if len(meta_vals) >= 2:
+            meta_location = meta_vals[1].lower()
+    return div_location, meta_location
+
+def get_job_data(html_data:str, job_url) -> Optional[Dict[str,Any]]:
     """get job description metadata from a JD url
     right now this only supports greenhouse (boards.greenhouse.io) JDs
     """
     schema = None
-    tree = html.fromstring(jd)
+    tree = html.fromstring(html_data)
     if tree.text == "The board you are looking for is no longer open.":
         logger.info(f"Job board closed for url {job_url}")
     else:
@@ -161,6 +173,12 @@ def get_job_data(jd:str, job_url) -> Optional[Dict[str,Any]]:
                 #this will happen if the job has been closed or the url was invalid
                 message = flash_pending[0]
                 logger.info(f"{job_url}: {message}")
+
+        div_location, meta_location = get_location_indicators(tree)
+        if div_location or meta_location:
+            schema = schema or dict()
+            loc_dict = {"location": {"div": div_location, "meta": meta_location}}
+            schema.update(loc_dict)
 
 
     return schema
@@ -192,7 +210,8 @@ def job_url_to_s3key(job_url: str, new_prefix=None) -> str:
     if new_prefix:
         key = f"{new_prefix}/{key}"
     return key
-
+#FIXME split this into two lambdas. first lambda scrapes raw html and writes it to deduped/boards.greenhouse.io/company/job_id.html
+# then second lambda does postprocessing to extract json
 def write_one_jd_s3(job_url: str, jd: dict, client: None, bucket_name="scrapedjobs"):
     client or boto3.client("s3")
 
